@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<broker xmlns="http://activemq.apache.org/schema">
+  <jaas-security domain="activemq"/>
+  <server configuration="etc/broker.xml"/>
+</broker>
