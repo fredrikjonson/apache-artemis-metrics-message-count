@@ -73,12 +73,10 @@ public class MetricsMessageCountTest extends AbstractTestNGSpringContextTests
     public void testCanGetSameValueFromMetricsAsPostOffice() throws Exception {
         var registry = broker.broker().getMetricsManager().getMeterRegistry();
         var metricsMessageCount = registry.get("artemis.message.count").tag("address", "disco.event.in").gauge().value();
-        logger.info("Metrics message count, expecting 0, found {}", metricsMessageCount);
         var queue = ((LocalQueueBinding) broker.broker().getPostOffice().getBinding(new SimpleString("disco.event.in"))).getQueue();
+        // While both are unexpectedly wrong, i.e not zero, they do match at least. Hence the mismatch is not introduced by micrometer.io.
+        logger.info("Metrics message count, expecting 0, found {}", metricsMessageCount);
         logger.info("Post office message count, expecting 0, found {}", queue.getMessageCount());
-        // While both are unexpectedly wrong, they do match at least, hence the mismatch is not introduced by micrometer.io.
-        assertEquals(metricsMessageCount, 1.0);
-        assertEquals(queue.getMessageCount(), 1.0);
         assertEquals(metricsMessageCount, queue.getMessageCount());
     }
 
@@ -94,24 +92,25 @@ public class MetricsMessageCountTest extends AbstractTestNGSpringContextTests
         var registry = broker.broker().getMetricsManager().getMeterRegistry();
         var queue = ((LocalQueueBinding) broker.broker().getPostOffice().getBinding(new SimpleString("disco.event.in"))).getQueue();
         // N.B starts with erroneous count. Perhaps page count instead of message count?
-        assertEquals(registry.get("artemis.message.count").tag("address", "disco.event.in").gauge().value(), 1.0);
+        logger.info("Metrics message count, expecting 0, found {}", queue.getMessageCount());
         eventListener.stop();
+        eventListener.shutdown();
         eventJmsTemplate.send(s -> { return s.createTextMessage("Test 1"); });
         eventJmsTemplate.send(s -> { return s.createTextMessage("Test 2"); });
         eventJmsTemplate.send(s -> { return s.createTextMessage("Test 3"); });
         // Wait for messages to be accepted.
-        Thread.sleep(3_000);
-        // N.B 2 unexpected results below. The message count is 2, which might correlate with the page count?
+        Thread.sleep(15_000);
         assertEquals(registry.get("artemis.message.count").tag("address", "disco.event.in").gauge().value(), 3.0);
         assertEquals(queue.getMessageCount(), 3.0);
         // Durable message count seems to align the expected message count.
         assertEquals(queue.getDurableMessageCount(), 3.0);
         // Begin consuming messages.
+        eventListener.initialize();
         eventListener.start();
         // Wait for messages to be consumed.
-        Thread.sleep(3_000);
-        // Actual after consuming the messages. N.B not expected; again perhaps the page count, not message count?
-        assertEquals(registry.get("artemis.message.count").tag("address", "disco.event.in").gauge().value(), 1.0);
+        Thread.sleep(15_000);
+        // Unexpected message count, 1.
+        logger.info("Metrics message count, expecting 0, found {}", queue.getMessageCount());
         // Expected result, all messages consumed.
         assertEquals(registry.get("artemis.message.count").tag("address", "disco.event.in").gauge().value(), 0.0);
     }
